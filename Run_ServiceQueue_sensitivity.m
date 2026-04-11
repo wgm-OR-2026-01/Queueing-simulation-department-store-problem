@@ -8,7 +8,7 @@ lambda = 0.8; % compute 1/1.25
 %[text] Departure (service) rate: customers served per minute
 mu = 1/8;
 %[text] Number of serving stations
-for s = 6:10
+for s = 1:10
     fprintf("\n===== Testing s = %d =====\n", s);
 %[text] Run 100 samples of the queue.
 NumSamples = 100;
@@ -27,7 +27,7 @@ LogInterval = 5; % 5 minute intervals
     P0 = 1 / (sum1 + sum2);
 
     % Compute P_n
-    nMax = 20
+    nMax = 20;
     P = zeros(1, nMax+1);
     for n = 0:nMax
         if n < s
@@ -76,12 +76,6 @@ LogInterval = 5; % 5 minute intervals
         q = QSamples{SampleNum};
         NumWaitingSamples{SampleNum} = q.Log.NumWaiting;
     end
-%[text] ### Option two: Map a function over the cell array of ServiceQueue objects.
-%[text] The `@(q) ...` expression is shorthand for a function that takes a `ServiceQueue` as input, names it `q`, and computes the sum of two columns from its log.  The `cellfun` function applies that function to each item in `QSamples`. The option `UniformOutput=false` tells `cellfun` to produce a cell array rather than a numerical array.
-    NumInSystemSamples = cellfun( ...
-        @(q) q.Log.NumWaiting + q.Log.NumInService, ...
-        QSamples, ...
-        UniformOutput=false);
 %[text] ## Join numbers from all sample runs.
 %[text] `vertcat` is short for "vertical concatenate", meaning it joins a bunch of arrays vertically, which in this case results in one tall column.
     NumInSystem = vertcat(NumInSystemSamples{:});
