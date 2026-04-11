@@ -27,7 +27,7 @@ LogInterval = 5; % 5 minute intervals
     P0 = 1 / (sum1 + sum2);
 
     % Compute P_n
-    nMax = 20
+    nMax = 20;
     P = zeros(1, nMax+1);
     for n = 0:nMax
         if n < s
@@ -76,12 +76,6 @@ LogInterval = 5; % 5 minute intervals
         q = QSamples{SampleNum};
         NumWaitingSamples{SampleNum} = q.Log.NumWaiting;
     end
-%[text] ### Option two: Map a function over the cell array of ServiceQueue objects.
-%[text] The `@(q) ...` expression is shorthand for a function that takes a `ServiceQueue` as input, names it `q`, and computes the sum of two columns from its log.  The `cellfun` function applies that function to each item in `QSamples`. The option `UniformOutput=false` tells `cellfun` to produce a cell array rather than a numerical array.
-    NumInSystemSamples = cellfun( ...
-        @(q) q.Log.NumWaiting + q.Log.NumInService, ...
-        QSamples, ...
-        UniformOutput=false);
 %[text] ## Join numbers from all sample runs.
 %[text] `vertcat` is short for "vertical concatenate", meaning it joins a bunch of arrays vertically, which in this case results in one tall column.
     NumInSystem = vertcat(NumInSystemSamples{:});
@@ -154,14 +148,8 @@ LogInterval = 5; % 5 minute intervals
     TimeWaitingSamples = cell([NumSamples, 1]);
     for SampleNum = 1:NumSamples
         q = QSamples{SampleNum};
-        TimeWaitingSamples{SampleNum} = q.Log.NumWaiting; % AI seems to think this is the problem...
+        TimeWaitingSamples{SampleNum} = cellfun(@(c) c.BeginServiceTime - c.ArrivalTime, q.Served');
     end
-%[text] ### Option two: Use `cellfun` twice.
-%[text] The outer call to `cellfun` means do something to each `ServiceQueue` object in `QSamples`.  The "something" it does is to look at each customer in the `ServiceQueue` object's list `q.Served` and compute the time it spent in the system.
-    TimeInSystemSamples = cellfun( ...
-        @(q) cellfun(@(c) c.DepartureTime - c.ArrivalTime, q.Served'), ...
-        QSamples, ...
-        UniformOutput=false);
 %[text] ### Join them all into one big column.
     TimeInSystem = vertcat(TimeInSystemSamples{:});
 
