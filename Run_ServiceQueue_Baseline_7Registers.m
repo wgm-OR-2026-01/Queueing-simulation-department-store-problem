@@ -1,4 +1,4 @@
-%[text] # Run samples of the ServiceQueue simulation
+%[text] # Run samples of the ServiceQueue simulation - Kait Mounce
 %[text] Collect statistics and plot histograms along the way.
 PictureFolder = "Pictures";
 mkdir(PictureFolder);
@@ -8,27 +8,51 @@ mkdir(PictureFolder);
 %[text] Arrival rate: 1 customer every 75 seconds = 60/75 = 0.8 customers per minute
 lambda = 0.8;
 %[text] Departure (service) rate: 1 customer per 6.5 minutes = 1/6.5 = 0.154 customers per minute
-mu = 0.154;
-%[text] Number of serving stations
-s = 5;
+mu = 1/6.5;
+%[text] Number of serving stations - with 7 cashiers
+s = 7;
 %[text] Run 100 samples of the queue.
 NumSamples = 100;
 %[text] Each sample is run up to a maximum time.
-MaxTime = 96;
+MaxTime = 240;
 %[text] Make a log entry every so often
-LogInterval = 1/60;
+LogInterval = 1;
 %%
-%[text] ## Numbers from theory for M/M/1 queue
-%[text] Compute `P(1+n)` = $P\_n$ = probability of finding the system in state $n$ in the long term. Note that this calculation assumes $s=1$.
+%[text] ## Numbers from theory for M/M/s queue
+%[text] Compute `P(1+n)` = $P\_n$ = probability of finding the system in state $n$ in the long term. Where s is the number of serving stations - in this file s = 4
 rho = lambda / mu;
-P0 = 1 - rho;
-nMax = 10;
-P = zeros([1, nMax+1]);
-%P(1) = P0;
-for n = 1:nMax
-    P(1+n) = P0 * rho^n;
-    P(1+n)
+a = rho/s;
+pTerm = 0;
+
+for n = 0:(s-1)
+    pTerm = pTerm + rho^n / factorial(n);
 end
+
+pZero = 1/ (pTerm + (rho^s / factorial(s)) * (1/(1-a)));
+nMax = 25;
+P = zeros([1, nMax+1]);
+P(1) = pZero;
+
+for n = 1:nMax
+    if n < s
+        P(n + 1) = pZero * rho^n / factorial(n);
+    else
+        P(n + 1) = pZero * rho^n / (factorial(s) * s^(n-s));
+
+    end
+end
+Lq = ((rho^s) / factorial(s-1)) * (lambda * mu / (s*mu - lambda)^2) * pZero;
+fprintf('Lq = %.4f\n', Lq);
+
+Wq = Lq / lambda;
+fprintf('Wq = %.4f minutes\n', Wq);
+
+L = Lq+ rho;
+fprintf('L = %.4f\n', L);
+
+W = L/lambda;
+fprintf('W = %.4f minutes\n', W);
+
 %%
 %[text] ## Run simulation samples
 %[text] This is the most time consuming calculation in the script, so let's put it in its own section.  That way, we can run it once, and more easily run the faster calculations multiple times as we add features to this script.
@@ -51,7 +75,7 @@ end
 %%
 %[text] ## Collect measurements of how many customers are in the system
 %[text] Count how many customers are in the system at each log entry for each sample run.  There are two ways to do this.  You only have to do one of them.
-%[text] ### Option one: Use a for loop.
+%[text] ### Option one: Use a for loop. - Solving for $L$
 NumInSystemSamples = cell([NumSamples, 1]);
 for SampleNum = 1:NumSamples
     q = QSamples{SampleNum};
@@ -61,6 +85,26 @@ for SampleNum = 1:NumSamples
     % columns like this.
     NumInSystemSamples{SampleNum} = q.Log.NumWaiting + q.Log.NumInService;
 end
+%[text] ### Print out mean number in the system ($L$)
+NumInSystem = vertcat(NumInSystemSamples{:});
+meanNumInSystemSamples = mean(NumInSystem);
+fprintf("Mean number in system: %f\n", meanNumInSystemSamples);
+%[text] ### 
+%[text] ### Use a for loop - Solving for $L\_q$
+
+NumWaitingSamples = cell([NumSamples, 1]);
+for SampleNum = 1:NumSamples
+    q = QSamples{SampleNum};
+    % Pull out samples of the number of customers in the queue system. Each
+    % sample run of the queue results in a column of samples of customer
+    % counts, because tables like q.Log allow easy extraction of whole
+    % columns like this.
+    NumWaitingSamples{SampleNum} = q.Log.NumWaiting;
+end
+%[text] ### Print out mean number waiting in the system ($L\_q$)
+NumWaitingSamples = vertcat(NumWaitingSamples{:});
+meanNumWaitingSamples = mean(NumInWaitingSamples);
+fprintf("Mean number waiting in system: %f\n", meanNumWaitingSamples);
 %[text] ### Option two: Map a function over the cell array of ServiceQueue objects.
 %[text] The `@(q) ...` expression is shorthand for a function that takes a `ServiceQueue` as input, names it `q`, and computes the sum of two columns from its log.  The `cellfun` function applies that function to each item in `QSamples`. The option `UniformOutput=false` tells `cellfun` to produce a cell array rather than a numerical array.
 NumInSystemSamples = cellfun( ...
@@ -107,7 +151,7 @@ exportgraphics(fig, PictureFolder + filesep + "Number in system histogram.svg");
 %%
 %[text] ## Collect measurements of how long customers spend in the system
 %[text] This is a rather different calculation because instead of looking at log entries for each sample `ServiceQueue`, we'll look at the list of served  customers in each sample `ServiceQueue`.
-%[text] ### Option one: Use a for loop.
+%[text] ### Option one: Use a for loop. - Solving for $W$
 TimeInSystemSamples = cell([NumSamples, 1]);
 for SampleNum = 1:NumSamples
     q = QSamples{SampleNum};
@@ -130,6 +174,37 @@ for SampleNum = 1:NumSamples
         cellfun(@(c) c.DepartureTime - c.ArrivalTime, q.Served');
 end
 
+%[text] ### Print out mean time waiting in the system ($W$)
+TimeInSystemSamples = vertcat(TimeInSystemSamples{:});
+meanTimeInSystemSamples = mean(TimeInSystemSamples);
+fprintf("Mean time in system: %f\n", meanTimeInSystemSamples);
+%[text] ### Use a for Loop - Solving for $W\_q$
+WaitingInSystemSamples = cell([NumSamples, 1]);
+for SampleNum = 1:NumSamples
+    q = QSamples{SampleNum};
+    % The next command has many parts.
+    %
+    % q.Served is a row vector of all customers served in this particular
+    % sample.
+    % The ' on q.Served' transposes it to a column.
+    %
+    % The @(c) ... expression below says given a customer c, compute its
+    % departure time minus its arrival time, which is how long c spent in
+    % the system.
+    %
+    % cellfun(@(c) ..., q.Served') means to compute the time each customer
+    % in q.Served spent in the system, and build a column vector of the
+    % results.
+    %
+    % The column vector is stored in TimeInSystemSamples{SampleNum}.
+ WaitingInSystemSamples{SampleNum} = ...
+        cellfun(@(c) c.BeginServiceTime - c.ArrivalTime, q.Served');
+end
+
+%[text] ### Print out mean waiting time in the system ($W\_q$)
+WaitingInSystemSamples = vertcat(WaitingInSystemSamples{:});
+meanWaitingInSystemSamples = mean(WaitingInSystemSamples);
+fprintf("Mean waiting time in system: %f\n", meanWaitingInSystemSamples);
 %[text] ### Option two: Use `cellfun` twice.
 %[text] The outer call to `cellfun` means do something to each `ServiceQueue` object in `QSamples`.  The "something" it does is to look at each customer in the `ServiceQueue` object's list `q.Served` and compute the time it spent in the system.
 TimeInSystemSamples = cellfun( ...
@@ -162,8 +237,13 @@ pause(2);
 exportgraphics(fig, PictureFolder + filesep + "Time in system histogram.pdf");
 exportgraphics(fig, PictureFolder + filesep + "Time in system histogram.svg");
 
+%[text] ## Requirement: Maximum Wait 
+t = 5; % 5 minute wait
+PWait = (((lambda/mu)^s) / (factorial(s) * (1-rho))) * pZero;
+P(Wq > t) = PWait * exp(((-(s * mu) - lambda)* t));
+
 %[appendix]{"version":"1.0"}
 %---
 %[metadata:view]
-%   data: {"layout":"inline"}
+%   data: {"layout":"onright","rightPanelPercent":62.8}
 %---
